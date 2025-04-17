@@ -71,7 +71,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
         side: BorderSide(color: Colors.black),
         padding: EdgeInsets.all(24),
       ),
-      child: Text( 
+      child: Text(
         text,
         style: TextStyle(fontSize: 24, color: Colors.black),
       ),

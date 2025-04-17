@@ -1,0 +1,2 @@
+C:/projectdream/calculator/android/app/.cxx/Debug/s415c5l1/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/projectdream/calculator/android/app/.cxx/Debug/s415c5l1/armeabi-v7a/CMakeFiles/rebuild_cache.dir

@@ -14,52 +14,105 @@ class CalculatorApp extends StatefulWidget {
 
 class _CalculatorAppState extends State<CalculatorApp> {
   String _expression = '0';
+  String _currentNumber = '';
+  String _lastOperator = '';
+  double _storedValue = 0;
 
   void _buttonPressed(String text) {
     setState(() {
       if (text == 'AC') {
-        _expression = '0';
+        _resetAll();
+      } else if (text == 'DEL') {
+        _deleteLastChar();
       } else if (text == '=') {
-        _expression = _evaluate(_expression);
+        _calculateResult();
+      } else if (['+', '-', '*', '/'].contains(text)) {
+        _handleOperator(text);
       } else {
-        if (_expression == '0') {
-          _expression = text;
-        } else {
-          _expression += text;
-        }
+        _handleNumberInput(text);
       }
     });
   }
 
-  String _evaluate(String expr) {
-    try {
-      List<String> tokens =
-          expr.split(RegExp(r'([+\-*/])')).map((e) => e.trim()).toList();
-      double result = double.parse(tokens[0]);
+  void _resetAll() {
+    _expression = '0';
+    _currentNumber = '';
+    _lastOperator = '';
+    _storedValue = 0;
+  }
 
-      for (int i = 1; i < tokens.length; i += 2) {
-        String op = tokens[i];
-        double num = double.parse(tokens[i + 1]);
-
-        switch (op) {
-          case '+':
-            result += num;
-            break;
-          case '-':
-            result -= num;
-            break;
-          case '*':
-            result *= num;
-            break;
-          case '/':
-            result /= num;
-            break;
-        }
+  void _deleteLastChar() {
+    if (_expression.length > 1) {
+      _expression = _expression.substring(0, _expression.length - 1);
+      if (_currentNumber.isNotEmpty) {
+        _currentNumber = _currentNumber.substring(0, _currentNumber.length - 1);
       }
+    } else {
+      _expression = '0';
+      _currentNumber = '';
+    }
+  }
 
-      return result.toString();
-    } catch (e) {
-      return 'Error';
+  void _handleNumberInput(String text) {
+    if (_expression == '0' || _lastOperator == '=') {
+      _expression = text;
+      _currentNumber = text;
+      if (_lastOperator == '=') {
+        _lastOperator = '';
+        _storedValue = 0;
+      }
+    } else {
+      _expression += text;
+      _currentNumber += text;
+    }
+  }
+
+  void _handleOperator(String operator) {
+    if (_currentNumber.isNotEmpty) {
+      double currentValue = double.parse(_currentNumber);
+      if (_lastOperator.isNotEmpty && _lastOperator != '=') {
+        _storedValue = _performCalculation(_storedValue, currentValue, _lastOperator);
+      } else {
+        _storedValue = currentValue;
+      }
+    }
+    _expression += operator;
+    _lastOperator = operator;
+    _currentNumber = '';
+  }
+
+  void _calculateResult() {
+    if (_lastOperator.isEmpty || _currentNumber.isEmpty) return;
+    
+    double currentValue = double.parse(_currentNumber);
+    double result = _performCalculation(_storedValue, currentValue, _lastOperator);
+    
+    _expression = result.toString();
+    if (result % 1 == 0) {
+      _expression = result.toInt().toString();
+    }
+    
+    _lastOperator = '=';
+    _currentNumber = _expression;
+    _storedValue = result;
+  }
+
+  double _performCalculation(double a, double b, String operator) {
+    switch (operator) {
+      case '+':
+        return a + b;
+      case '-':
+        return a - b;
+      case '*':
+        return a * b;
+      case '/':
+        if (b == 0) {
+          _expression = 'ERROR';
+          return 0;
+        }
+        return a / b;
+      default:
+        return b;
     }
   }
 
@@ -71,7 +124,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
         side: BorderSide(color: Colors.black),
         padding: EdgeInsets.all(24),
       ),
-      child: Text( 
+      child: Text(
         text,
         style: TextStyle(fontSize: 24, color: Colors.black),
       ),
@@ -135,8 +188,9 @@ class _CalculatorAppState extends State<CalculatorApp> {
                 _buildButton('='),
                 _buildButton('+'),
                 _buildButton('AC'),
-                _buildButton('%'),  // optional functionality
-                _buildButton('()'), // optional functionality
+                _buildButton('%'),
+                _buildButton('()'),
+                _buildButton("DEL")
               ],
             ),
           ),

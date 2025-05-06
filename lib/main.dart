@@ -16,7 +16,6 @@ class _CalculatorAppState extends State<CalculatorApp> {
   String _expression = '0';
   String _currentNumber = '';
   String _lastOperator = '';
-  double _storedValue = 0;
   bool _nextBracketIsOpen = true;
   bool _shouldResetExpression = false;
   int _openBracketCount = 0;
@@ -29,7 +28,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
         _deleteLastChar();
       } else if (text == '=') {
         _calculateResult();
-      } else if (text == '()') {
+      } else if (text == '( )') {
         _handleBrackets();
       } else if (['+', '-', '*', '/'].contains(text)) {
         _handleOperator(text);
@@ -47,7 +46,6 @@ class _CalculatorAppState extends State<CalculatorApp> {
     _expression = '0';
     _currentNumber = '';
     _lastOperator = '';
-    _storedValue = 0;
     _nextBracketIsOpen = true;
     _shouldResetExpression = false;
     _openBracketCount = 0;
@@ -80,6 +78,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
       _expression = text;
       _currentNumber = text;
       _shouldResetExpression = false;
+      _lastOperator = '';
     } else {
       _expression += text;
       _currentNumber += text;
@@ -91,6 +90,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
       _expression = '0.';
       _currentNumber = '0.';
       _shouldResetExpression = false;
+      _lastOperator = '';
     } else if (!_currentNumber.contains('.')) {
       if (_currentNumber.isEmpty) {
         _expression += '0.';
@@ -104,26 +104,14 @@ class _CalculatorAppState extends State<CalculatorApp> {
 
   void _handleOperator(String operator) {
     if (_lastOperator == '=' && _currentNumber.isNotEmpty) {
-      _storedValue = double.tryParse(_currentNumber) ?? 0;
       _expression = _currentNumber + operator;
       _lastOperator = operator;
       _currentNumber = '';
       _shouldResetExpression = false;
       return;
     }
-    if (_lastOperator == '=' && !_shouldResetExpression) {
-      _shouldResetExpression = false;
-    }
-    if (_currentNumber.isNotEmpty || _lastOperator == '=') {
-      if (_currentNumber.isNotEmpty) {
-        double currentValue = double.parse(_currentNumber);
-        if (_lastOperator.isNotEmpty && _lastOperator != '=') {
-          _storedValue =
-              _performCalculation(_storedValue, currentValue, _lastOperator);
-        } else {
-          _storedValue = currentValue;
-        }
-      }
+    
+    if (_currentNumber.isNotEmpty || _expression.endsWith(')')) {
       _expression += operator;
       _lastOperator = operator;
       _currentNumber = '';
@@ -135,25 +123,29 @@ class _CalculatorAppState extends State<CalculatorApp> {
     }
   }
 
-  void _handleBrackets() {
-    if (_nextBracketIsOpen) {
-      if (_expression == '0' || _shouldResetExpression) {
-        _expression = '(';
-        _expression = '(';
-        _shouldResetExpression = false;
-      } else {
-        _expression += '(';
-      }
-      _openBracketCount++;
-    } else if (_openBracketCount > 0 &&
-        (_currentNumber.isNotEmpty || _lastOperator.isEmpty)) {
+void _handleBrackets() {
+  if (_nextBracketIsOpen) {
+    // Opening bracket logic (unchanged)
+    if (_expression == '0' || _shouldResetExpression) {
+      _expression = '(';
+      _shouldResetExpression = false;
+    } else if (_lastOperator.isNotEmpty || _expression.endsWith('(')) {
+      _expression += '(';
+    } else {
+      _expression += '*('; // Implicit multiplication
+    }
+    _openBracketCount++;
+  } else {
+    // Modified closing bracket condition
+    if (_openBracketCount > 0) {
       _expression += ')';
       _openBracketCount--;
     }
-    _nextBracketIsOpen = !_nextBracketIsOpen;
-    _currentNumber = '';
-    _lastOperator = '';
   }
+  _nextBracketIsOpen = !_nextBracketIsOpen;
+  _currentNumber = '';
+  _lastOperator = '';
+}
 
   void _handlePercentage() {
     if (_currentNumber.isNotEmpty) {
@@ -178,21 +170,17 @@ class _CalculatorAppState extends State<CalculatorApp> {
         return;
       }
 
-      if (_lastOperator.isEmpty || _currentNumber.isEmpty) return;
-
-      double currentValue = double.parse(_currentNumber);
-      double result =
-          _performCalculation(_storedValue, currentValue, _lastOperator);
-
+      // Replace × with * for evaluation
+      String evalExpression = _expression.replaceAll('×', '*');
+      
+      // Evaluate the expression with BODMAS rules
+      double result = _evaluateExpression(evalExpression);
+      
       _expression = result % 1 == 0
           ? result.toInt().toString()
-          : result
-              .toStringAsFixed(result.truncateToDouble() == result ? 0 : 8)
-              .replaceAll(RegExp(r'0*$'), '')
-              .replaceAll(RegExp(r'\.$'), '');
+          : result.toStringAsFixed(8).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
       _lastOperator = '=';
       _currentNumber = _expression;
-      _storedValue = result;
       _shouldResetExpression = true;
       _nextBracketIsOpen = true;
     } catch (e) {
@@ -200,20 +188,81 @@ class _CalculatorAppState extends State<CalculatorApp> {
     }
   }
 
-  double _performCalculation(double a, double b, String operator) {
-    switch (operator) {
-      case '+':
-        return a + b;
-      case '-':
-        return a - b;
-      case '*':
-        return a * b;
-      case '/':
-        if (b == 0) throw 'Division by zero';
-        return a / b;
-      default:
-        return b;
+  double _evaluateExpression(String expression) {
+    // First evaluate all expressions in brackets recursively
+    while (expression.contains('(')) {
+      int openIndex = expression.lastIndexOf('(');
+      int closeIndex = expression.indexOf(')', openIndex);
+      
+      if (closeIndex == -1) throw 'Unbalanced brackets';
+      
+      String subExpression = expression.substring(openIndex + 1, closeIndex);
+      double subResult = _evaluateSimpleExpression(subExpression);
+      
+      expression = expression.replaceRange(openIndex, closeIndex + 1, subResult.toString());
     }
+    
+    return _evaluateSimpleExpression(expression);
+  }
+
+  double _evaluateSimpleExpression(String expression) {
+    // Handle multiplication and division first
+    List<String> tokens = _tokenizeExpression(expression);
+    
+    // First pass for * and /
+    for (int i = 1; i < tokens.length - 1; i++) {
+      if (tokens[i] == '*' || tokens[i] == '/') {
+        double left = double.parse(tokens[i-1]);
+        double right = double.parse(tokens[i+1]);
+        double result = tokens[i] == '*' ? left * right : left / right;
+        
+        tokens.removeRange(i-1, i+2);
+        tokens.insert(i-1, result.toString());
+        i -= 2; // Adjust index after removing elements
+      }
+    }
+    
+    // Second pass for + and -
+    for (int i = 1; i < tokens.length - 1; i++) {
+      if (tokens[i] == '+' || tokens[i] == '-') {
+        double left = double.parse(tokens[i-1]);
+        double right = double.parse(tokens[i+1]);
+        double result = tokens[i] == '+' ? left + right : left - right;
+        
+        tokens.removeRange(i-1, i+2);
+        tokens.insert(i-1, result.toString());
+        i -= 2; // Adjust index after removing elements
+      }
+    }
+    
+    if (tokens.length != 1) throw 'Invalid expression';
+    
+    return double.parse(tokens[0]);
+  }
+
+  List<String> _tokenizeExpression(String expression) {
+    List<String> tokens = [];
+    String currentNumber = '';
+    
+    for (int i = 0; i < expression.length; i++) {
+      String char = expression[i];
+      
+      if (['+', '-', '*', '/'].contains(char)) {
+        if (currentNumber.isNotEmpty) {
+          tokens.add(currentNumber);
+          currentNumber = '';
+        }
+        tokens.add(char);
+      } else {
+        currentNumber += char;
+      }
+    }
+    
+    if (currentNumber.isNotEmpty) {
+      tokens.add(currentNumber);
+    }
+    
+    return tokens;
   }
 
   Widget _buildButton(
@@ -233,7 +282,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
           ? Icon(icon, color: Colors.white, size: 24)
           : Text(
               text,
-              style: TextStyle(fontSize: 24, color: Colors.white),
+              style: TextStyle(fontSize: 24, color: Colors.white, fontFamily: text == 'AC' ? 'Roboto' : 'Arial'),
             ),
     );
   }
@@ -243,7 +292,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 50, 65, 50),
+        backgroundColor: const Color.fromARGB(255, 47, 49, 31),
         actions: [
           IconButton(
             icon: Icon(Icons.more_vert, color: Colors.white),
@@ -255,7 +304,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 50, 65, 50),
+              color: const Color.fromARGB(255, 47, 49, 31),
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(20.0),
                 bottomRight: Radius.circular(20.0),
@@ -267,7 +316,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
               scrollDirection: Axis.horizontal,
               child: Text(
                 _expression,
-                style: TextStyle(fontSize: 40, color: Colors.white),
+                style: TextStyle(fontSize: 60, color: Colors.white),
               ),
             ),
           ),
@@ -275,49 +324,49 @@ class _CalculatorAppState extends State<CalculatorApp> {
             child: GridView.count(
               crossAxisCount: 4,
               physics: NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.only(bottom: 2, top: 20),
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
               children: [
                 _buildButton('AC',
-                    backgroundColor: Color.fromARGB(255, 7, 84, 121)),
-                _buildButton('()',
+                    backgroundColor: const Color.fromARGB(255, 25, 121, 111)),
+                _buildButton('( )',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70)),
                 _buildButton('%',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70)),
                 _buildButton('/',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70)),
                 _buildButton('7',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('8',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('9',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('*',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70),
                     icon: Icons.close),
                 _buildButton('4',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('5',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('6',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('-',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70)),
                 _buildButton('1',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('2',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('3',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('+',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70)),
                 _buildButton('0',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
                 _buildButton('.',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56)),
-                 _buildButton('DEL',
-                    backgroundColor: Color.fromARGB(255, 55, 65, 56),
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31)),
+                _buildButton('DEL',
+                    backgroundColor: Color.fromARGB(255, 47, 49, 31),
                     icon: Icons.backspace),
                 _buildButton('=',
                     backgroundColor: Color.fromARGB(255, 69, 102, 70)),

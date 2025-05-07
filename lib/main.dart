@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -19,6 +20,34 @@ class _CalculatorAppState extends State<CalculatorApp> {
   bool _nextBracketIsOpen = true;
   bool _shouldResetExpression = false;
   int _openBracketCount = 0;
+  String _formatExpressionForDisplay(String expression) {
+  final buffer = StringBuffer();
+  final regExp = RegExp(r'(\d+|\D)'); // splits digits and non-digits
+
+  for (final match in regExp.allMatches(expression)) {
+    final token = match.group(0)!;
+
+    if (RegExp(r'^\d+$').hasMatch(token)) {
+      // Format only digit blocks (not decimals or operations)
+      final number = int.tryParse(token);
+      if (number != null) {
+        buffer.write(_formatWithCommas(number));
+      } else {
+        buffer.write(token);
+      }
+    } else {
+      buffer.write(token); // Operators, brackets, etc.
+    }
+  }
+
+  return buffer.toString();
+}
+
+String _formatWithCommas(int number) {
+  return number.toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+}
+
 
   void _buttonPressed(String text) {
     setState(() {
@@ -305,15 +334,15 @@ class _CalculatorAppState extends State<CalculatorApp> {
         actions: [
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: Colors.white),
+            color: Color.fromARGB(255, 47, 49, 31),
             onSelected: (value) {},
             itemBuilder: (BuildContext context) => [
-              PopupMenuItem(value: 'settings', child: Text('Settings')),
-              PopupMenuItem(value: 'help', child: Text('Help')),
-              PopupMenuItem(value: 'about', child: Text('About This App')),
+              PopupMenuItem(value: 'settings', child: Text('History')),
+              PopupMenuItem(value: 'help', child: Text('Choose theme')),
+              PopupMenuItem(value: 'about', child: Text('Privacy policy')),
               PopupMenuItem(
-                  value: 'more settings', child: Text('More Settings')),
-              PopupMenuItem(value: 'log in', child: Text('Log in')),
-              PopupMenuItem(value: 'Topic', child: Text('Topic')),
+                  value: 'more settings', child: Text('Send feedback')),
+              PopupMenuItem(value: 'log in', child: Text('Help')),
             ],
           ),
         ],
@@ -333,7 +362,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Text(
-                _expression,
+                _formatExpressionForDisplay(_expression),
                 style: TextStyle(fontSize: 60, color: Colors.white),
               ),
             ),

@@ -22,6 +22,8 @@ class _CalculatorAppState extends State<CalculatorApp> {
 
   void _buttonPressed(String text) {
     setState(() {
+      if (text == 'x') text = '*'; // 👈 Handle 'x' as multiplication
+
       if (text == 'AC') {
         _resetAll();
       } else if (text == 'DEL') {
@@ -110,7 +112,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
       _shouldResetExpression = false;
       return;
     }
-    
+
     if (_currentNumber.isNotEmpty || _expression.endsWith(')')) {
       _expression += operator;
       _lastOperator = operator;
@@ -123,29 +125,29 @@ class _CalculatorAppState extends State<CalculatorApp> {
     }
   }
 
-void _handleBrackets() {
-  if (_nextBracketIsOpen) {
-    // Opening bracket logic (unchanged)
-    if (_expression == '0' || _shouldResetExpression) {
-      _expression = '(';
-      _shouldResetExpression = false;
-    } else if (_lastOperator.isNotEmpty || _expression.endsWith('(')) {
-      _expression += '(';
+  void _handleBrackets() {
+    if (_nextBracketIsOpen) {
+      // Opening bracket logic (unchanged)
+      if (_expression == '0' || _shouldResetExpression) {
+        _expression = '(';
+        _shouldResetExpression = false;
+      } else if (_lastOperator.isNotEmpty || _expression.endsWith('(')) {
+        _expression += '(';
+      } else {
+        _expression += '*('; // Implicit multiplication
+      }
+      _openBracketCount++;
     } else {
-      _expression += '*('; // Implicit multiplication
+      // Modified closing bracket condition
+      if (_openBracketCount > 0) {
+        _expression += ')';
+        _openBracketCount--;
+      }
     }
-    _openBracketCount++;
-  } else {
-    // Modified closing bracket condition
-    if (_openBracketCount > 0) {
-      _expression += ')';
-      _openBracketCount--;
-    }
+    _nextBracketIsOpen = !_nextBracketIsOpen;
+    _currentNumber = '';
+    _lastOperator = '';
   }
-  _nextBracketIsOpen = !_nextBracketIsOpen;
-  _currentNumber = '';
-  _lastOperator = '';
-}
 
   void _handlePercentage() {
     if (_currentNumber.isNotEmpty) {
@@ -170,15 +172,18 @@ void _handleBrackets() {
         return;
       }
 
-      // Replace × with * for evaluation
-      String evalExpression = _expression.replaceAll('×', '*');
-      
+      // Replace 'x' with '*' before evaluation
+      String evalExpression = _expression.replaceAll('x', '*');
+
       // Evaluate the expression with BODMAS rules
       double result = _evaluateExpression(evalExpression);
-      
+
       _expression = result % 1 == 0
           ? result.toInt().toString()
-          : result.toStringAsFixed(8).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+          : result
+              .toStringAsFixed(8)
+              .replaceAll(RegExp(r'0*$'), '')
+              .replaceAll(RegExp(r'\.$'), '');
       _lastOperator = '=';
       _currentNumber = _expression;
       _shouldResetExpression = true;
@@ -193,60 +198,61 @@ void _handleBrackets() {
     while (expression.contains('(')) {
       int openIndex = expression.lastIndexOf('(');
       int closeIndex = expression.indexOf(')', openIndex);
-      
+
       if (closeIndex == -1) throw 'Unbalanced brackets';
-      
+
       String subExpression = expression.substring(openIndex + 1, closeIndex);
       double subResult = _evaluateSimpleExpression(subExpression);
-      
-      expression = expression.replaceRange(openIndex, closeIndex + 1, subResult.toString());
+
+      expression = expression.replaceRange(
+          openIndex, closeIndex + 1, subResult.toString());
     }
-    
+
     return _evaluateSimpleExpression(expression);
   }
 
   double _evaluateSimpleExpression(String expression) {
     // Handle multiplication and division first
     List<String> tokens = _tokenizeExpression(expression);
-    
+
     // First pass for * and /
     for (int i = 1; i < tokens.length - 1; i++) {
       if (tokens[i] == '*' || tokens[i] == '/') {
-        double left = double.parse(tokens[i-1]);
-        double right = double.parse(tokens[i+1]);
+        double left = double.parse(tokens[i - 1]);
+        double right = double.parse(tokens[i + 1]);
         double result = tokens[i] == '*' ? left * right : left / right;
-        
-        tokens.removeRange(i-1, i+2);
-        tokens.insert(i-1, result.toString());
+
+        tokens.removeRange(i - 1, i + 2);
+        tokens.insert(i - 1, result.toString());
         i -= 2; // Adjust index after removing elements
       }
     }
-    
+
     // Second pass for + and -
     for (int i = 1; i < tokens.length - 1; i++) {
       if (tokens[i] == '+' || tokens[i] == '-') {
-        double left = double.parse(tokens[i-1]);
-        double right = double.parse(tokens[i+1]);
+        double left = double.parse(tokens[i - 1]);
+        double right = double.parse(tokens[i + 1]);
         double result = tokens[i] == '+' ? left + right : left - right;
-        
-        tokens.removeRange(i-1, i+2);
-        tokens.insert(i-1, result.toString());
+
+        tokens.removeRange(i - 1, i + 2);
+        tokens.insert(i - 1, result.toString());
         i -= 2; // Adjust index after removing elements
       }
     }
-    
+
     if (tokens.length != 1) throw 'Invalid expression';
-    
+
     return double.parse(tokens[0]);
   }
 
   List<String> _tokenizeExpression(String expression) {
     List<String> tokens = [];
     String currentNumber = '';
-    
+
     for (int i = 0; i < expression.length; i++) {
       String char = expression[i];
-      
+
       if (['+', '-', '*', '/'].contains(char)) {
         if (currentNumber.isNotEmpty) {
           tokens.add(currentNumber);
@@ -257,11 +263,11 @@ void _handleBrackets() {
         currentNumber += char;
       }
     }
-    
+
     if (currentNumber.isNotEmpty) {
       tokens.add(currentNumber);
     }
-    
+
     return tokens;
   }
 
@@ -282,7 +288,10 @@ void _handleBrackets() {
           ? Icon(icon, color: Colors.white, size: 24)
           : Text(
               text,
-              style: TextStyle(fontSize: 24, color: Colors.white, fontFamily: text == 'AC' ? 'Roboto' : 'Arial'),
+              style: TextStyle(
+                  fontSize: 24,
+                  color: Colors.white,
+                  fontFamily: text == 'AC' ? 'Roboto' : 'Arial'),
             ),
     );
   }
@@ -294,10 +303,19 @@ void _handleBrackets() {
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 47, 49, 31),
         actions: [
-          IconButton(
+          PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: Colors.white),
-            onPressed: () {},
-          )
+            onSelected: (value) {},
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem(value: 'settings', child: Text('Settings')),
+              PopupMenuItem(value: 'help', child: Text('Help')),
+              PopupMenuItem(value: 'about', child: Text('About This App')),
+              PopupMenuItem(
+                  value: 'more settings', child: Text('More Settings')),
+              PopupMenuItem(value: 'log in', child: Text('Log in')),
+              PopupMenuItem(value: 'Topic', child: Text('Topic')),
+            ],
+          ),
         ],
       ),
       body: Column(
